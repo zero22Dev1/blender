@@ -1,164 +1,101 @@
 ---
 name: git-worktree-feature
-description: Git worktreeを使って、機能単位のブランチと分離された作業フォルダを作成し、そのworktree内だけで実装・検証・コミットする。新機能、修正、リファクタリングをメイン作業ツリーから安全に分離したいときに使用する。
+description: Git worktree、機能ブランチ、作業ツリーの分離、別フォルダでの機能開発、並行開発について依頼されたときに使う。新機能、バグ修正、リファクタリングを専用ブランチとworktreeで実装・テストしたい場合に発火しやすい。
 ---
 
-# Git Worktree Feature
+# 機能ごとのGit worktree
 
-機能ごとに独立したGit worktreeを作成し、メインの作業ツリーを汚さずに実装するためのSkillです。
+このSkillは、1つの機能を1つのブランチとworktreeに分けて作業するための手順です。
 
-## 絶対ルール
+## このSkillが発火する場面
 
-1. 作業開始前に、現在のワークスペースがGitリポジトリか確認する。
-2. Gitリポジトリでない場合は、勝手に初期化せず停止する。ユーザーに `git init` または clone が必要だと伝える。
-3. worktree作成後は、すべての読み書き、検索、テスト、ビルド、Git操作を対象worktreeの絶対パスで行う。
-4. メイン作業ツリーのファイルを、機能実装のために直接編集しない。
-5. ユーザーの未コミット変更を対象worktreeへコピーしない。必要な変更は、ユーザーの明示的な依頼がある場合だけ扱う。
-6. 既存の変更、既存ブランチ、既存worktreeを削除・上書きしない。
-7. 機能名、変更範囲、受け入れ条件、使用するテストコマンドが不明なら、作業を始めず確認する。
-8. 実装後は対象worktree内でテストまたはビルドを実行し、結果を報告する。
-9. ユーザーの明示的な依頼なしに、マージ、rebase、force push、worktree削除を行わない。
+次のような依頼で自動発火しやすくなります。
 
-## 標準の命名規則
+- 「Git worktreeを使って機能ごとに開発したい」
+- 「ログイン機能用に別ブランチと別フォルダを作って」
+- 「メインの作業ツリーを汚さずにバグ修正したい」
+- 「複数の機能を並行して開発できるようにして」
+- 「featureブランチとworktreeを作成して」
+- 「別の作業ツリーでリファクタリングしたい」
 
-- ブランチとworktreeのslugは、Windows環境での文字コード問題を避けるため、ASCIIの小文字英数字とハイフンだけにする。
-- 機能名が日本語などASCII以外を含む場合は、表示用の `-Feature` とは別に `-Slug` を指定する。
-- ブランチ名: `feature/<slug>`
-- worktreeパス: リポジトリの親にある `<リポジトリ名>-worktrees/<slug>`
-- 例:
-  - 機能名: `ユーザー認証`
-  - slug: `user-authentication`
-  - ブランチ: `feature/user-authentication`
-  - worktree: `C:\path\to\<repo>-worktrees\user-authentication`
+依頼文に`git worktree`、`worktree`、`機能ブランチ`、`featureブランチ`、`別フォルダ`、`作業ツリーを分ける`、`並行開発`などの言葉があると、さらに意図が伝わりやすくなります。
 
-## 実行手順
+### このSkillを使わない場面
 
-### 1. 事前確認
+次の依頼だけでは、通常このSkillは使いません。
 
-対象ワークスペースの絶対パスを確認してから、次を実行する。
+- 単にコミットメッセージを考える
+- 既存ブランチの名前を確認する
+- Gitの一般的な使い方を説明する
+- 現在の差分やログを表示するだけ
+- すでに開いているworktree内でコードを修正する
 
-```powershell
-$workspace = (Get-Location).Path
-git -C $workspace rev-parse --show-toplevel
-git -C $workspace status --short --branch
-git -C $workspace worktree list
+### 確実に発火させる方法
+
+自動発火に任せず、確実に使いたい場合は次のslash commandを入力します。
+
+```text
+/git-worktree-feature
 ```
 
-`git rev-parse` が失敗した場合は、次のどちらかをユーザーに依頼して停止する。
+VB.NETの機能をworktree上でTDD開発する場合は、先にこのSkillでworktreeを作り、その後`/vbnet-tdd`を使います。
 
-- 既存リポジトリを clone する
-- 空のプロジェクトでよければ、ユーザーの確認後に `git init` を実行する
+## 基本方針
 
-作業ツリーに未コミット変更がある場合、変更は新しいworktreeには含まれないことを明示する。ベースにするコミットが必要なら、先にユーザーへコミットまたはstashを依頼する。
+- メインの作業ツリーを直接編集しない。
+- worktreeを作る前に、Gitリポジトリと作業状態を確認する。
+- 未コミットの変更、既存ブランチ、既存worktreeを上書きしない。
+- worktreeを作った後は、対象worktreeの絶対パスで作業する。
+- merge、rebase、push、worktreeの削除は、ユーザーに頼まれたときだけ行う。
 
-### 2. 機能用worktreeの作成
+## 手順
 
-このSkillに含まれるスクリプトを使用する。
+### 1. 要件を確認する
 
-```powershell
-$skillRoot = 'C:\path\to\workspace\.cline\skills\git-worktree-feature'
-& "$skillRoot\scripts\new-feature-worktree.ps1" -Feature '機能名' -Slug 'feature-slug'
+機能名、ASCIIのslug、受け入れ条件、テスト方法が分からない場合は、実装を始めずに確認する。
+
+日本語の機能名には、Git用のslugを別に指定する。
+
+```text
+機能名: ユーザー認証
+slug: user-authentication
 ```
 
-実際の実行時は、`$skillRoot`をこのSkillのディレクトリの絶対パスに置き換える。スクリプトは次を検査する。
+### 2. worktreeを作る
 
-- Gitリポジトリであること
-- bare repositoryでないこと
-- メイン作業ツリーに未コミット変更がないこと
-- ASCIIのslugが有効な形式であること
-- 対象パスが存在しないこと
-- 対象ブランチが既にworktreeで使用されていないこと
+元のリポジトリを`$workspace`に指定し、次のスクリプトを実行する。
 
-既存ブランチを再利用する場合は、作成スクリプトを無理に使わず、まず `git worktree list` と `git branch --list` で状態を確認する。既存worktreeの再利用は、ユーザーが明示的に指定した場合だけ行う。
+```powershell
+$workspace = 'C:\path\to\repository'
+$script = Join-Path $workspace '.cline\skills\git-worktree-feature\scripts\new-feature-worktree.ps1'
 
-### 3. VS CodeとClineを対象worktreeへ切り替える
+Set-Location -LiteralPath $workspace
+& $script -Feature 'ユーザー認証' -Slug 'user-authentication'
+```
 
-スクリプトの出力にある `worktreePath` を使う。
+スクリプトは、Gitリポジトリ、未コミット変更、ブランチ、worktree、対象パスを確認してから作成する。出力された`worktreePath`とブランチ名を記録する。
+
+### 3. 対象worktreeを開く
 
 ```powershell
 code '<worktreePath>'
 ```
 
-新しいVS Codeウィンドウで対象worktreeを開いた後、Clineに実装を依頼する。Clineが元のウィンドウで継続する場合は、すべてのファイルパスとコマンドに対象worktreeの絶対パスを付ける。
+以後の検索、編集、テスト、ビルド、Git操作は、必ず対象worktreeで行う。プロジェクトの開発には、必要に応じて`/vbnet-tdd`を続けて使う。
 
-### 4. 対象worktreeで実装する
+### 4. 実装と検証を行う
 
-実装前に次を確認する。
+1. 対象worktreeのブランチと初期状態を確認する。
+2. プロジェクトの規約とテスト方法を読む。
+3. 受け入れ条件を満たす最小の変更を行う。
+4. テスト、lint、型チェック、ビルドを実行する。
+5. 差分と生成物を確認する。
 
-- `git -C '<worktreePath>' branch --show-current` が `feature/<slug>` である
-- `git -C '<worktreePath>' status --short` の初期状態が想定どおりである
-- プロジェクトの既存構成、規約、テスト方法を読んでいる
+### 5. 完了を報告する
 
-その後、次の順で進める。
+機能名、ブランチ、worktreeの絶対パス、変更ファイル、実行した検証、結果、未解決の問題を報告する。コミットした場合はコミットIDも報告する。
 
-1. 機能要件と受け入れ条件を整理する。
-2. 必要最小限のファイルを対象worktree内に作成・変更する。
-3. 既存のテスト、lint、型チェック、ビルドを実行する。
-4. 必要ならテストを追加する。
-5. 変更差分とテスト結果を確認する。
-6. ユーザーの承認方針に従い、コミットするか、コミット可能な状態で停止する。
+## 詳細
 
-コミット例:
-
-```powershell
-git -C '<worktreePath>' add .
-git -C '<worktreePath>' commit -m 'feat: implement <feature-slug>'
-```
-
-### 5. 統合と後片付け
-
-マージはユーザーの明示的な依頼がある場合だけ行う。依頼された場合は、メイン作業ツリーがクリーンであることを確認してから実行する。
-
-```powershell
-git -C '<mainRepoPath>' status --short --branch
-git -C '<mainRepoPath>' merge feature/<slug>
-git -C '<mainRepoPath>' worktree list
-```
-
-worktree削除もユーザーの明示的な依頼がある場合だけ行う。
-
-```powershell
-git -C '<mainRepoPath>' worktree remove '<worktreePath>'
-git -C '<mainRepoPath>' branch -d feature/<slug>
-```
-
-未コミット変更があるworktreeは、`--force`を使って削除しない。先に差分を確認し、ユーザーへ選択肢を提示する。
-
-## Clineへの入力例
-
-```text
-/git-worktree-feature
-
-機能名: ユーザー認証
-slug: user-authentication
-要件:
-- メールアドレスとパスワードでログインできる
-- バリデーションエラーを表示する
-- 既存のテスト規約に合わせてテストを追加する
-受け入れ条件:
-- 正常系と異常系のテストが通る
-- lintと型チェックが通る
-- READMEまたは関連ドキュメントに使い方を追記する
-
-まず `-Feature 'ユーザー認証' -Slug 'user-authentication'` で機能用worktreeを作成し、対象worktreeのパスとブランチを報告してください。worktreeをVS Codeで開き直した後、対象worktree内だけで実装してください。
-```
-
-## 完了時の報告形式
-
-最後に次を報告する。
-
-- 機能名
-- ブランチ名
-- worktreeの絶対パス
-- 変更ファイル一覧
-- 実行したテスト、lint、型チェック、ビルド
-- 各コマンドの結果
-- コミットID（コミットした場合）
-- 未解決の問題
-- マージまたは削除をまだ実行していないこと
-
-## 制限事項
-
-- worktreeはGitリポジトリのコミットをベースに作成される。未コミット変更は自動で引き継がれない。
-- `.env`、`node_modules`、ビルド成果物などのignored filesはworktreeへ自動コピーされない。対象worktree内で必要なセットアップを行う。
-- Git worktreeを使うには、対象プロジェクトがGitリポジトリとして初期化またはclone済みである必要がある。
+- 命名、作成条件、コミット、merge、削除: [docs/worktree-lifecycle.md](docs/worktree-lifecycle.md)
+- 失敗時の切り分け: [docs/troubleshooting.md](docs/troubleshooting.md)
